@@ -1,5 +1,11 @@
-```text
-   temporal/
-   .ipynb_checkpoints/
-   *.tmp
-   ```
+temporal/
+.ipynb_checkpoints/
+*.tmp
+__pycache__/
+*.pyc
+# Datos y salidas: nunca al repositorio
+*.parquet
+*.csv
+*.joblib
+PRIVADO/
+REVISION_2026_10/
