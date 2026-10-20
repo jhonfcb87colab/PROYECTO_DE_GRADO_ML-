@@ -1,0 +1,5 @@
+```text
+   temporal/
+   .ipynb_checkpoints/
+   *.tmp
+   ```
