@@ -1,0 +1,12 @@
+zona_urbana,localidad,upz,borrar_coordenadas,nota
+D TUNAL 1,TUNJUELITO,TUNJUELITO,si,"v1 la ubicó en el sector TUNAL ALTO de la UPR Río Sumapaz (rural). El barrio El Tunal está en Tunjuelito."
+R&D TUNAL A,TUNJUELITO,TUNJUELITO,si,"Igual que D TUNAL 1."
+R TUNAL 1,TUNJUELITO,TUNJUELITO,si,"Igual que D TUNAL 1."
+D MOCHUELO 1,CIUDAD BOLIVAR,EL MOCHUELO,no,"v1 la dejó en la UPR Río Tunjuelo, que abarca dos localidades. Mochuelo Alto y Bajo son de Ciudad Bolívar. Revisar si la zona cubre más que el Mochuelo."
+D MOCHUELO 2,CIUDAD BOLIVAR,EL MOCHUELO,no,"Igual que D MOCHUELO 1."
+D GUAYMARAL 1,SUBA,GUAYMARAL,no,"v1 la dejó en la UPR Zona Norte (Suba y Usaquén). Guaymaral es la UPZ 3 de Suba."
+D CONCEPCION 1,,,si,"v1 la ubicó en la UPR Río Sumapaz con 4 guías; el nombre se repite en varias localidades. Se deja sin asignar."
+URBANA,,,si,"Nombre genérico (1 guía). Se deja sin asignar."
+D TIBABUYES 1,SUBA,TIBABUYES,no,"v1 encontró el sector pero no la UPZ. Tibabuyes es la UPZ 71 de Suba."
+R&D TIBABUYES A,SUBA,TIBABUYES,no,"Igual que D TIBABUYES 1."
+D EL CEDRITO 1,USAQUEN,,no,"v1 encontró el sector pero no la UPZ. El Cedrito está en Usaquén; la UPZ queda por confirmar."
