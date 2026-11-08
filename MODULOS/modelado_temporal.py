@@ -378,3 +378,100 @@ def ordenar(tabla, orden):
                                else tabla[c].astype(str).rank(method="dense"))
                            for c, vals in orden.items()})
     return tabla.iloc[np.lexsort([claves[c].to_numpy() for c in reversed(list(orden))])].reset_index(drop=True)
+
+
+# =====================================================================================
+# G. AJUSTES DE LA EVALUACIÓN DEL 04-11 (A6 huella de la base, C4 capacidad fija por día)
+# =====================================================================================
+
+import hashlib
+
+def sha256_archivo(ruta, bloque=1 << 20):
+    h = hashlib.sha256()
+    with open(ruta, "rb") as f:
+        for b in iter(lambda: f.read(bloque), b""):
+            h.update(b)
+    return h.hexdigest()
+
+def guardar_huella(carpeta):
+    """A6: SHA-256 de base_modelado.parquet en huella.json. Los cuadernos siguientes la verifican."""
+    hx = sha256_archivo(f"{carpeta}base_modelado.parquet")
+    with open(f"{carpeta}huella.json", "w") as f:
+        json.dump({"archivo": "base_modelado.parquet", "sha256": hx,
+                   "registrada": datetime.datetime.now().isoformat(timespec="seconds")}, f, indent=2)
+    return hx
+
+def verificar_huella(carpeta):
+    """A6: detiene el cuaderno si base_modelado.parquet cambió desde que 0411 la registró."""
+    esperado = json.load(open(f"{carpeta}huella.json"))["sha256"]
+    actual = sha256_archivo(f"{carpeta}base_modelado.parquet")
+    assert actual == esperado, "base_modelado.parquet cambió desde 0411: vuelva a correr 0411 y los cuadernos siguientes"
+    return actual
+
+def alertas_por_capacidad(p, dia, k):
+    """C4: marca las k guías de mayor puntaje de cada día (capacidad fija, sin umbral global).
+    Empates en el puesto k se rompen por orden de aparición (estable)."""
+    s = pd.DataFrame({"p": np.asarray(p, float), "dia": np.asarray(dia)})
+    puesto = s.groupby("dia")["p"].rank(method="first", ascending=False)
+    return (puesto <= k).to_numpy()
+
+def tabla_capacidad(y, p, dia, ks=(250, 500, 1000)):
+    """C4: exhaustividad y precisión con k alertas por día (k fijo; si un día tiene menos de k guías, se alertan todas)."""
+    y = np.asarray(y).astype(int); filas = []; n_dias = len(np.unique(dia))
+    for k in ks:
+        a = alertas_por_capacidad(p, dia, k)
+        tp = int((a & (y == 1)).sum()); fp = int((a & (y == 0)).sum()); fn = int((~a & (y == 1)).sum())
+        filas.append({"k_por_dia": k, "alertas_por_dia_media": a.sum() / n_dias,
+                      "exhaustividad": tp / max(tp + fn, 1), "precision": tp / max(tp + fp, 1),
+                      "incumplimientos_detectados": tp, "incumplimientos_omitidos": fn, "falsas_alertas": fp})
+    return pd.DataFrame(filas)
+
+# ---------- C3: referencias de mediana y búsqueda por función de pérdida ----------
+PERDIDA_CORTA = {"reg:squarederror": "L2", "regression": "L2", "reg:absoluteerror": "L1", "regression_l1": "L1",
+                 "reg:pseudohubererror": "Huber", "huber": "Huber"}
+
+def mediana_por_grupo(y_tr, g_tr, g_eval):
+    """Mediana de y en el entrenamiento por grupo; los grupos sin datos usan la mediana global del entrenamiento."""
+    med = pd.Series(np.asarray(y_tr, float)).groupby(np.asarray(g_tr)).median()
+    return pd.Series(np.asarray(g_eval)).map(med).fillna(float(np.median(y_tr))).to_numpy()
+
+def puntaje_menor_margen(margen_h, escala_h=24.0):
+    """A5: 'menor margen primero' como puntaje en [0, 1] monótono decreciente en el margen (solo sirve
+    para ordenar: AP, AUC y capacidad k son válidos; Brier y pérdida logarítmica no se interpretan)."""
+    m = np.nan_to_num(np.asarray(margen_h, float), nan=np.nanmedian(margen_h))
+    return 1.0 / (1.0 + np.exp(np.clip(m / escala_h, -50, 50)))
+
+def mejores_por_perdida(tabla, espacio, modelo, version="internas"):
+    """C3: mejor configuración de regresión de 'modelo' para CADA función de pérdida buscada."""
+    g = tabla[(tabla.version == version) & (tabla.tarea == "reg") & (tabla.modelo == modelo)]
+    if "p_objetivo_reg" not in g: return {}
+    out = {}
+    for obj, gg in g.groupby("p_objetivo_reg"):
+        fila = gg.sort_values("promedio").iloc[0]
+        out[obj] = {"promedio_MAE_h": float(fila.promedio), "n_configs": int(len(gg)),
+                    "params": {k[2:]: (None if (isinstance(v, float) and np.isnan(v)) else (v.item() if hasattr(v, "item") else v))
+                               for k, v in fila.items() if k.startswith("p_") and k[2:] in espacio}}
+    return out
+
+def diferencia_capacidad_por_bloques(y, pred_a, pred_b, dia, k, B=1000, semilla=42):
+    """C4: diferencia de exhaustividad con k alertas por día (a − b), IC 95 % remuestreando días completos."""
+    y = np.asarray(y).astype(int); dia = np.asarray(dia)
+    aa, ab = alertas_por_capacidad(pred_a, dia, k), alertas_por_capacidad(pred_b, dia, k)
+    t = pd.DataFrame({"dia": dia, "pos": y, "tp_a": aa & (y == 1), "tp_b": ab & (y == 1)}).groupby("dia").sum()
+    pos, ta, tb = t.pos.to_numpy(float), t.tp_a.to_numpy(float), t.tp_b.to_numpy(float)
+    obs = ta.sum() / max(pos.sum(), 1) - tb.sum() / max(pos.sum(), 1)
+    rng = np.random.default_rng(semilla); reps = []
+    for _ in range(B):
+        ii = rng.integers(0, len(pos), len(pos)); P = max(pos[ii].sum(), 1)
+        reps.append(ta[ii].sum() / P - tb[ii].sum() / P)
+    lo, hi = np.percentile(reps, [2.5, 97.5])
+    return {"diferencia": obs, "ic95_inf": lo, "ic95_sup": hi, "dias": len(pos)}
+
+def diferencia_tarea(pr, tarea, version_a, modelo_a, version_b, modelo_b, B, semilla):
+    """Como 'diferencias', pero para una sola tarea (sirve con modelos que solo existen en regresión o en clasificación)."""
+    metrica = average_precision_score if tarea == "clf" else mean_absolute_error
+    a = pr[(pr.version == version_a) & (pr.tarea == tarea) & (pr.modelo == modelo_a)].sort_values(["bloque", "guia"])
+    b = pr[(pr.version == version_b) & (pr.tarea == tarea) & (pr.modelo == modelo_b)].sort_values(["bloque", "guia"])
+    if len(a) == 0 or len(b) == 0: return None
+    assert len(a) == len(b) and (a.guia.values == b.guia.values).all(), "Las dos predicciones no tienen las mismas guías"
+    return diferencia_por_bloques(a.y.values, a.pred.values, b.pred.values, a.dia.values, metrica, B=B, semilla=semilla)
