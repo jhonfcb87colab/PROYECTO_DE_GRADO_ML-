@@ -9,7 +9,7 @@
 *.shp
 
 # Exportaciones con salidas: nunca. Los .ipynb se suben, pero sin salidas
-*.html
+#*.html
 *.dbc
 .ipynb_checkpoints/
 
@@ -23,5 +23,5 @@ clave_*.txt
 # Python y temporales
 __pycache__/
 *.pyc
-temporal/
+#temporal/
 *.tmp
